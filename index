@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+  <base target="_top">
+  <meta charset="UTF-8">
+  <title>驗票機 Scanner</title>
+  <!-- 引入 Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- 引入 HTML5-QRCode 庫 -->
+  <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+</head>
+<body class="bg-gray-100 flex flex-col items-center justify-center min-h-screen p-4">
+
+  <div class="bg-white rounded-xl shadow-lg p-6 w-full max-w-md text-center relative">
+    
+    <!-- 右上角設定按鈕 (當在 GitHub 託管時，可設定 API 網址) -->
+    <button onclick="toggleConfigModal(true)" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 focus:outline-none" title="設定 API 網址">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+      </svg>
+    </button>
+
+    <h1 class="text-2xl font-bold text-gray-800 mb-4">🎟️ 綜藝表演 驗票機</h1>
+    
+    <div id="start-screen" class="my-4">
+        <div id="env-badge" class="bg-blue-50 text-blue-800 p-3 rounded-lg mb-4 text-xs font-semibold text-center border border-blue-200">
+            偵測中...
+        </div>
+
+        <div class="bg-amber-50 text-amber-800 p-4 rounded-lg mb-6 text-sm text-left border border-amber-200" id="ios-warning">
+            <strong>📸 備用方案 (手動拍照)：</strong><br>
+            若瀏覽器無法載入實時鏡頭，可點擊下方進行拍照驗票。
+        </div>
+
+        <!-- 隱藏的檔案輸入框 (調用原生相機) -->
+        <input type="file" id="qr-input-file" accept="image/*" capture="environment" class="hidden">
+        
+        <label for="qr-input-file" class="w-full bg-emerald-600 text-white font-bold py-4 px-4 rounded-lg hover:bg-emerald-700 shadow-lg text-lg transition duration-200 cursor-pointer block mb-6 flex items-center justify-center active:bg-emerald-800">
+            📸 拍照驗票 (備用/舊iPad)
+        </label>
+
+        <div class="relative flex py-2 items-center mb-4">
+            <div class="flex-grow border-t border-gray-300"></div>
+            <span class="flex-shrink-0 mx-4 text-gray-400 text-sm">推薦極速方案</span>
+            <div class="flex-grow border-t border-gray-300"></div>
+        </div>
+
+        <!-- 極速實時掃描 -->
+        <button onclick="startScanner()" class="w-full bg-blue-600 text-white font-bold py-4 px-4 rounded-lg hover:bg-blue-700 transition duration-200 shadow-md text-lg">
+            ▶️ 啟動實時相機掃描 (秒嘟)
+        </button>
+    </div>
+    
+    <!-- 掃描器視窗區 -->
+    <div id="scanner-container" class="hidden">
+        <div id="reader" class="w-full mx-auto rounded-lg overflow-hidden border-4 border-gray-200 bg-white min-h-[250px]"></div>
+        <button onclick="stopScanner()" class="mt-4 w-full bg-gray-500 text-white font-bold py-3 px-4 rounded-lg hover:bg-gray-600 transition">
+          🛑 關閉實時相機
+        </button>
+    </div>
+
+    <div id="dummy-reader" style="display: none;"></div>
+
+    <!-- 結果顯示區 -->
+    <div id="result-box" class="mt-6 p-4 rounded-lg hidden">
+      <h2 id="result-name" class="text-xl font-bold mb-2"></h2>
+      <p id="result-msg" class="text-lg"></p>
+    </div>
+  </div>
+
+  <!-- API 設定彈出視窗 -->
+  <div id="config-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center p-4 hidden z-50">
+    <div class="bg-white rounded-lg p-6 max-w-sm w-full shadow-2xl">
+      <h3 class="text-lg font-bold mb-2 text-gray-800">⚙️ 設置 GAS API 網址</h3>
+      <p class="text-xs text-gray-500 mb-4">如果在 GitHub 託管，請貼上你部署的 Google Web App 網址以連結資料庫：</p>
+      <input type="text" id="api-url-input" class="w-full border p-2 rounded mb-4 text-sm" placeholder="https://script.google.com/macros/s/.../exec">
+      <div class="flex justify-end gap-2">
+        <button onclick="toggleConfigModal(false)" class="bg-gray-300 text-gray-700 px-4 py-2 rounded text-sm hover:bg-gray-400">取消</button>
+        <button onclick="saveApiUrl()" class="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700">儲存</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let html5QrcodeScanner;
+    let isScanning = true;
+    let globalHtml5QrCode = null;
+    let isStandaloneMode = false; // 是否在 Google Apps Script 外部運行
+
+    // ==========================================
+    // 辨識運行環境及讀取設定
+    // ==========================================
+    window.addEventListener('DOMContentLoaded', () => {
+      globalHtml5QrCode = new Html5Qrcode("dummy-reader");
+      
+      const badge = document.getElementById('env-badge');
+      const savedUrl = localStorage.getItem('gas_api_url');
+      
+      // 偵測是否被裝在 Google iframe 中，抑或是獨立運作
+      if (typeof google !== 'undefined' && google.script && google.script.run) {
+        isStandaloneMode = false;
+        badge.innerText = "🟢 系統模式：Google Apps Script 內置執行";
+        badge.className = "bg-green-50 text-green-800 p-3 rounded-lg mb-4 text-xs font-semibold text-center border border-green-200";
+      } else {
+        isStandaloneMode = true;
+        badge.innerText = "🌐 系統模式：GitHub Pages 獨立執行";
+        badge.className = "bg-purple-50 text-purple-800 p-3 rounded-lg mb-4 text-xs font-semibold text-center border border-purple-200";
+        if (savedUrl) {
+          document.getElementById('api-url-input').value = savedUrl;
+        } else {
+          // 如果未設定 API，提醒使用者設定
+          setTimeout(() => { toggleConfigModal(true); }, 500);
+        }
+      }
+    });
+
+    function toggleConfigModal(show) {
+      document.getElementById('config-modal').classList.toggle('hidden', !show);
+    }
+
+    function saveApiUrl() {
+      const url = document.getElementById('api-url-input').value.trim();
+      if (url) {
+        localStorage.setItem('gas_api_url', url);
+        toggleConfigModal(false);
+        alert("✅ API 網址設定成功！已保存在瀏覽器。");
+      } else {
+        alert("⚠️ 請輸入有效的 Google Web App 網址！");
+      }
+    }
+
+    // ==========================================
+    // EXIF 輕量解析器與影像處理 (保留給拍照備用方案)
+    // ==========================================
+    function getExifOrientation(file, callback) {
+      const reader = new FileReader();
+      const chunk = file.slice(0, 65536);
+      reader.onload = function(e) {
+        const view = new DataView(e.target.result);
+        if (view.byteLength < 2 || view.getUint16(0, false) != 0xFFD8) return callback(-2);
+        const length = view.byteLength;
+        let offset = 2;
+        while (offset < length) {
+          if (offset + 2 > length) break;
+          const marker = view.getUint16(offset, false);
+          offset += 2;
+          if (marker == 0xFFE1) {
+            if (offset + 12 > length) break;
+            if (view.getUint32(offset + 2, false) != 0x45786966) return callback(-1);
+            const little = view.getUint16(offset + 8, false) == 0x4949;
+            const tiffOffset = offset + 8;
+            const ifdOffset = tiffOffset + view.getUint32(tiffOffset + 4, little);
+            if (ifdOffset + 2 > length) break;
+            const tagsCount = view.getUint16(ifdOffset, little);
+            let tagOffset = ifdOffset + 2;
+            for (let i = 0; i < tagsCount; i++) {
+              if (tagOffset + 12 > length) break;
+              if (view.getUint16(tagOffset, little) == 0x0112) return callback(view.getUint16(tagOffset + 8, little));
+              tagOffset += 12;
+            }
+          } else if ((marker & 0xFF00) == 0xFF00) {
+            if (offset + 2 > length) break;
+            offset += view.getUint16(offset, false);
+          } else {
+            break;
+          }
+        }
+        return callback(-1);
+      };
+      reader.readAsArrayBuffer(chunk);
+    }
+
+    function resizeAndProcessImage(file, callback) {
+      getExifOrientation(file, function(orientation) {
+        const img = new Image();
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          img.onload = function() {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            let width = img.width;
+            let height = img.height;
+            const MAX_BOUND = 600; 
+            
+            if (width > MAX_BOUND || height > MAX_BOUND) {
+              if (width > height) {
+                height = Math.round(height * MAX_BOUND / width);
+                width = MAX_BOUND;
+              } else {
+                width = Math.round(width * MAX_BOUND / height);
+                height = MAX_BOUND;
+              }
+            }
+            const swapWidthHeight = orientation >= 5 && orientation <= 8;
+            if (swapWidthHeight) {
+              canvas.width = height;
+              canvas.height = width;
+            } else {
+              canvas.width = width;
+              canvas.height = height;
+            }
+            switch (orientation) {
+              case 2: ctx.transform(-1, 0, 0, 1, width, 0); break;
+              case 3: ctx.transform(-1, 0, 0, -1, width, height); break;
+              case 4: ctx.transform(1, 0, 0, -1, 0, height); break;
+              case 5: ctx.transform(0, 1, 1, 0, 0, 0); break;
+              case 6: ctx.transform(0, 1, -1, 0, height, 0); break;
+              case 7: ctx.transform(0, -1, -1, 0, height, width); break;
+              case 8: ctx.transform(0, -1, 1, 0, 0, width); break;
+              default: break;
+            }
+            ctx.drawImage(img, 0, 0, width, height);
+            canvas.toBlob(function(blob) { callback(blob); }, 'image/jpeg', 0.80);
+          };
+          img.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+
+    // ==========================================
+    // 拍照變更監聽 (備用功能)
+    // ==========================================
+    document.getElementById('qr-input-file').addEventListener('change', function(e) {
+      if (e.target.files.length == 0) return;
+      const file = e.target.files[0];
+      const resultBox = document.getElementById('result-box');
+      const nameEl = document.getElementById('result-name');
+      const msgEl = document.getElementById('result-msg');
+
+      resultBox.classList.remove('hidden');
+      resultBox.className = "mt-6 p-4 rounded-lg bg-blue-100 text-blue-800 block animate-pulse";
+      nameEl.innerText = "⚡️ 正在解析相片...";
+      msgEl.innerText = "正進行方向校正與條碼讀取...";
+
+      resizeAndProcessImage(file, function(processedBlob) {
+        if (!globalHtml5QrCode) {
+          globalHtml5QrCode = new Html5Qrcode("dummy-reader");
+        }
+        globalHtml5QrCode.scanFile(processedBlob, false)
+          .then(decodedText => {
+              verifyWithServer(decodedText);
+              e.target.value = '';
+          })
+          .catch(err => {
+              resultBox.className = "mt-6 p-4 rounded-lg bg-red-100 text-red-800 border-2 border-red-500 block";
+              nameEl.innerText = "⚠️ 辨識失敗";
+              msgEl.innerText = "未能讀取 QR Code，請拿穩、對焦、避免背光，並確保條碼佔畫面中央，然後重新拍照。";
+              e.target.value = '';
+          });
+      });
+    });
+
+    // ==========================================
+    // 核心：通訊網絡控制 (自動判斷內置或 API 呼叫)
+    // ==========================================
+    function verifyWithServer(decodedText) {
+      const resultBox = document.getElementById('result-box');
+      const nameEl = document.getElementById('result-name');
+      const msgEl = document.getElementById('result-msg');
+      
+      resultBox.classList.remove('hidden');
+      resultBox.className = "mt-6 p-4 rounded-lg bg-blue-100 text-blue-800 block animate-pulse";
+      nameEl.innerText = "📡 登記中...";
+      msgEl.innerText = "正上載並核對資料...";
+
+      if (!isStandaloneMode) {
+        // 情況 A: GAS 原生環境
+        google.script.run
+          .withSuccessHandler(showResponse)
+          .withFailureHandler(showNetworkError)
+          .verifyTicket(decodedText);
+      } else {
+        // 情況 B: GitHub Pages 外部環境 (採用 CORS Fetch API)
+        const apiUrl = localStorage.getItem('gas_api_url');
+        if (!apiUrl) {
+          resultBox.className = "mt-6 p-4 rounded-lg bg-red-100 text-red-800 border-2 border-red-500 block";
+          nameEl.innerText = "⚠️ 未設定 API 網址";
+          msgEl.innerText = "請點擊右上角 ⚙️ 設定你部署的 Google 網頁應用程式網址。";
+          return;
+        }
+
+        // 發送 HTTP Get 請求到 Google Web App 觸發 doGet API
+        const targetRequest = `${apiUrl}?action=verify&uuid=${encodeURIComponent(decodedText)}`;
+        
+        fetch(targetRequest)
+          .then(response => {
+            if (!response.ok) throw new Error('網絡無響應');
+            return response.json();
+          })
+          .then(data => {
+            showResponse(data);
+          })
+          .catch(error => {
+            console.error("API 錯誤: ", error);
+            showNetworkError();
+          });
+      }
+    }
+
+    // ==========================================
+    // 畫面渲染回饋
+    // ==========================================
+    function showResponse(response) {
+      const resultBox = document.getElementById('result-box');
+      const nameEl = document.getElementById('result-name');
+      const msgEl = document.getElementById('result-msg');
+
+      if (response.status === 'success') {
+        resultBox.className = "mt-6 p-4 rounded-lg bg-green-100 text-green-800 border-2 border-green-500 block";
+        nameEl.innerText = response.name;
+        msgEl.innerText = "🟢 " + response.message;
+        
+        // 成功入場，停留 1.5 秒自動重設，方便義工直接幫下一個嘟
+        setTimeout(() => {
+          resultBox.classList.add('hidden');
+          if (html5QrcodeScanner && !isScanning) {
+            html5QrcodeScanner.resume();
+            isScanning = true;
+          }
+        }, 1500);
+
+      } else if (response.status === 'duplicate') {
+        resultBox.className = "mt-6 p-4 rounded-lg bg-red-100 text-red-800 border-2 border-red-500 block animate-bounce";
+        nameEl.innerText = response.name;
+        msgEl.innerText = "🔴 重複進場！" + response.message;
+        
+        // 點擊可以重設相機繼續嘟
+        msgEl.innerHTML += "<br><span class='text-xs underline cursor-pointer font-bold block mt-2' onclick='resumeAfterAlert()'>[確認並繼續嘟下一張]</span>";
+      } else {
+        resultBox.className = "mt-6 p-4 rounded-lg bg-yellow-100 text-yellow-800 border-2 border-yellow-500 block";
+        nameEl.innerText = response.name;
+        msgEl.innerText = "🟡 " + response.message;
+        
+        msgEl.innerHTML += "<br><span class='text-xs underline cursor-pointer font-bold block mt-2' onclick='resumeAfterAlert()'>[繼續嘟下一張]</span>";
+      }
+    }
+
+    function resumeAfterAlert() {
+      document.getElementById('result-box').classList.add('hidden');
+      if (html5QrcodeScanner && !isScanning) {
+        html5QrcodeScanner.resume();
+        isScanning = true;
+      }
+    }
+
+    function showNetworkError() {
+      const resultBox = document.getElementById('result-box');
+      const nameEl = document.getElementById('result-name');
+      const msgEl = document.getElementById('result-msg');
+      resultBox.className = "mt-6 p-4 rounded-lg bg-red-100 text-red-800 border-2 border-red-500 block";
+      nameEl.innerText = "⚠️ 網絡錯誤";
+      msgEl.innerText = "無法連線到 Google 資料庫，請確保這台 iPad/電腦已連線上網。";
+      msgEl.innerHTML += "<br><span class='text-xs underline cursor-pointer font-bold block mt-2' onclick='resumeAfterAlert()'>[重試下一張]</span>";
+    }
+
+    // ==========================================
+    // 實時網頁鏡頭控制 (完美秒嘟，支持 PC/Mac/iPad 獨立部署版)
+    // ==========================================
+    function onScanSuccess(decodedText, decodedResult) {
+      if (!isScanning) return;
+      isScanning = false;
+
+      if (html5QrcodeScanner) {
+          html5QrcodeScanner.pause(true); // 暫停鏡頭，避免重複讀取
+      }
+      verifyWithServer(decodedText);
+    }
+
+    function onScanFailure(error) {
+      // 靜默處理，避免狂噴 Console
+    }
+
+    function startScanner() {
+      document.getElementById('start-screen').classList.add('hidden');
+      document.getElementById('scanner-container').classList.remove('hidden');
+      if (html5QrcodeScanner) html5QrcodeScanner.clear();
+      
+      // 啟動實時相機鏡頭：黃金設置
+      html5QrcodeScanner = new Html5QrcodeScanner(
+        "reader", 
+        { 
+          fps: 15,                     // 每秒偵測 15 幀
+          qrbox: {width: 260, height: 260}, // 掃描框大小
+          aspectRatio: 1.0,            // 1:1 比例，最適合 QR
+          supportedScanTypes: [Html5QrcodeScanType.SCAN_TYPE_CAMERA] // 僅限鏡頭實時掃描
+        }, 
+        false
+      );
+      
+      html5QrcodeScanner.render(onScanSuccess, onScanFailure);
+      isScanning = true;
+    }
+
+    function stopScanner() {
+      if (html5QrcodeScanner) html5QrcodeScanner.clear();
+      document.getElementById('start-screen').classList.remove('hidden');
+      document.getElementById('scanner-container').classList.add('hidden');
+      document.getElementById('result-box').classList.add('hidden');
+    }
+  </script>
+</body>
+</html>
